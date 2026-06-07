@@ -1,28 +1,47 @@
 package client
 
 import (
-	"fmt"
+	"bufio"
+	"fmt"	
+	"net"
+	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ShareFile will handle the logic for slicing the file and hosting/sending it.
 // We capitalize "ShareFile" so it is public (exported) and can be used in main.go.
 func ShareFile(filePath string) {
 	fmt.Printf("Client: Preparing to share file: %s\n", filePath)
-
-	//For our local prototype, we will 	copy the file to a "downloaded_" version in the same directory to verify it works. 
-	dir := filepath.Dir(filePath)
-	base := filepath.Base(filePath)
-	dstPath := filepath.Join(dir, "copy_"+base)
-
-	fmt.Printf("Prototype: copying file to %s to test chunking/hashing...\n", dstPath)
-	hash, err := CopyFileAndHash(filePath, dstPath)
-	if err !=nil {
-			fmt.Printf("Error during prototype transfer: %v\n", err)
+    //Get the file information (name and size)
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		fmt.Printf("Error: Failed to get file details: %v\n", err)
 		return
 	}
-		fmt.Printf("Verification Successful!\n")
-	fmt.Printf("File SHA-256 Fingerprint: %s\n", hash) 
+	fileName := filepath.Base(filePath)
+	fileSize :=fileInfo.Size()
+
+	//Compute the file's SHA-256 fingerprint
+	fmt.Println("Client: Calculating file hash fingerprint...")
+	hash, err := ComputeFileHash(filePath)
+	if err != nil {
+		fmt.Printf("Error: Failed to calculate file hash: %v\n", err)
+		return
+	}
+	
+	//Connect to the signalling & relay server 
+	conn, err :=net.Dial("tcp", "localhost:8080")
+	if err != nil {
+		fmt.Printf("Error: failed to connect to server: %v\n", err)
+		return 
+	}
+	defer conn.Close()
+
+	//send the share command to register the file 
+	fmt.Fprintf(conn, "Share %s %d %s\n", fileName, fileSize, hash)
+
+  
 }
 
 
