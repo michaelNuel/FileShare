@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"strconv"
 )
 
 // ShareFile will handle the logic for slicing the file and hosting/sending it.
@@ -128,6 +129,14 @@ func DownloadFile(code string) {
 	fileSizeStr := parts[2]
 	targetHash := parts[3]
 
+		// Convert file size from string to integer (int64) so we can pass it to ReceiveFileStream
+	fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
+	if err != nil {
+		fmt.Printf("Error: Invalid file size received from server: %v\n", err)
+		return
+	}
+
+
 	fmt.Println("--------------------------------------------------")
 	fmt.Printf("File Found: %s (%s bytes)\n", fileName, fileSizeStr)
 	fmt.Println("--------------------------------------------------")
@@ -141,7 +150,7 @@ func DownloadFile(code string) {
 	fmt.Println("Downloading file chunks...")
 
 	//Stream file bytes from the network socket to disk
-	calculatedHash, err := RecieverFileStream(downloadPath, conn)
+	calculatedHash, err := RecieverFileStream(downloadPath,  conn, fileSize)
 	if err != nil {
      fmt.Printf("Error: Download failed: %v\n", err)
 	 //Clean up the incomplete file

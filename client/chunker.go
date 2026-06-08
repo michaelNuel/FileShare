@@ -5,7 +5,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
+
+// printProgressBar prints a visual progress bar to the terminal using carriage return (\r).
+func printProgressBar(bytesProcessed int64, totalBytes int64) {
+	if totalBytes <= 0 {
+		return
+	}
+	// Calculate percentage
+	pct := (float64(bytesProcessed) / float64(totalBytes)) * 100
+	if pct > 100 {
+		pct = 100
+	}
+	// Bar configuration (20 characters wide)
+	barWidth := 20
+	filled := int(pct / 100 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	// Construct the bar string
+	// \u2588 is the Unicode code for the solid block █
+	bar := strings.Repeat("█", filled) + strings.Repeat("-", barWidth-filled)
+	// Print with \r at the beginning to overwrite the current line
+	// Note: We use Printf and NO newline (\n) at the end.
+	fmt.Printf("\r[%s] %.1f%% (%d/%d bytes)", bar, pct, bytesProcessed, totalBytes)
+}
 
 // ComputeFileHash calculates the SHA-256 has of a local file
 func ComputeFileHash(filepath string) (string, error) {
@@ -44,7 +69,18 @@ func SendFileStream(filePath string, writer io.Writer) error {
 	}
 	defer file.Close()
 
+	//Get this file for progress calculation
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file stats: %v", err)
+	}
+	totalSize := fileInfo.Size()
+
 	buffer := make([]byte, 4096)
+	var bytesSent int64
+
+	// Print initial 0% progress bar
+	printProgressBar(0, totalSize)
 
 	for {
 		n, err := file.Read(buffer)
@@ -54,6 +90,9 @@ func SendFileStream(filePath string, writer io.Writer) error {
 			if writeErr != nil {
 				return fmt.Errorf("failed to write chunk to network: %v", writeErr)
 			}
+			bytesSent += int64(n)
+			// Print updated progress bar
+			printProgressBar(bytesSent, totalSize)
 		}
 		if err == io.EOF {
 			break
@@ -63,12 +102,14 @@ func SendFileStream(filePath string, writer io.Writer) error {
 		}
 	}
 
+	// Print a final newline so the next console outputs start on a new line!
+	fmt.Println()
 	return nil
 }
 
 //RecieverFileStream reads bytes from the network connection (reader) and writes them to the disk, while calculating the SHA-256 hash on the fly
 
-func RecieverFileStream(dstPath string, reader io.Reader) (string, error) {
+func RecieverFileStream(dstPath string, reader io.Reader, fileSize int64) (string, error) {
 	file, err := os.Create(dstPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create destination file: %v", err)
@@ -80,6 +121,7 @@ func RecieverFileStream(dstPath string, reader io.Reader) (string, error) {
 	multiWriter := io.MultiWriter(file, hasher)
 
 	buffer := make([]byte, 4096)
+	var bytesReceived int64
 
 	for {
 		//Read a chunk from the network connection
@@ -90,6 +132,9 @@ func RecieverFileStream(dstPath string, reader io.Reader) (string, error) {
 			if writeErr != nil {
 				return "", fmt.Errorf("failed to write chunk to disk/hasher: %v", writeErr)
 			}
+			bytesReceived += int64(n)
+			// Print updated progress bar
+			printProgressBar(bytesReceived, fileSize)
 		}
 
 		if err == io.EOF {
@@ -153,6 +198,7 @@ func CopyFileAndHash(srcPath string, dstPath string) (string, error) {
 				return "", fmt.Errorf("failed to write data: %v", writeErr)
 			}
 			totalBytesRead += int64(n)
+
 		}
 
 		//Check if we hit the End of file (EOF)
