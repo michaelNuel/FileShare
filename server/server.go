@@ -74,6 +74,8 @@ func handleConnection(conn net.Conn) {
 
 	//Trim the newline Characters and split by spaces
 	line = strings.TrimSpace(line)
+	// ADD THIS DEBUG LINE HERE:
+	fmt.Printf("Server Debug: Received line: %q\n", line)
 	parts := strings.Split(line, " ")
 	if len(parts) < 2 {
 		fmt.Fprintln(conn, "Error invalid command structure")
