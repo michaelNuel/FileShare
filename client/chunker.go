@@ -6,7 +6,71 @@ import (
 	"io"
 	"os"
 	"strings"
+	"archive/zip"
+	"path/filepath"
 )
+
+//ZipFolder zips a folder recursively into a single target .zip file 
+func ZipFolder (sourceFolder string, targetZipPath string) error {
+	//Create the destination zip file
+	zipFile, err := os.Create(targetZipPath)
+	if err != nil {
+		return fmt.Errorf("Failed to create zip archive %v", err)
+	}
+	defer zipFile.Close()
+
+	//Create a Zip Writer that compresses bytes as they are written 
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close() //defer close seals the zip file at the end 
+
+	//Walk the directory tree recursively 
+	err = filepath.Walk(sourceFolder, func(path string, info os.FileInfo, err error) error {
+		if err != nil{
+			return err 
+		}
+
+		//skip  directories (we only write files; folders will be recreated during unzip)
+		if info.IsDir() {
+			return nil
+		}
+		//get the relative path of the file (/) for ZIP specification compatability 
+		relPath, err := filepath.Rel(sourceFolder, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path: %v", err)
+		}
+    
+	// Convert paths to use forward slashes (/) for ZIP specification compatibility
+		
+		zipPath :=filepath.ToSlash(relPath)
+		// Create a file header inside the zip archive
+		writerInZip, err := zipWriter.Create(zipPath)
+		if err != nil {
+			return fmt.Errorf("Failed to create file entry in zip: %v", err)
+		}
+
+		//Open the actual source file on disk 
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open file for zipping: %v", err)
+		}
+		defer file.Close()
+
+		// Stream the file bytes directly into the zip entry
+		_, err = io.Copy(writerInZip, file)
+		if err != nil {
+			return fmt.Errorf("Failed to write file content to zip: %v", err)
+		}
+
+		return nil
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("directory walk failed %v", err)
+	}
+
+	return nil
+}
 
 // printProgressBar prints a visual progress bar to the terminal using carriage return (\r).
 func printProgressBar(bytesProcessed int64, totalBytes int64) {
