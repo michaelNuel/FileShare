@@ -1,17 +1,17 @@
 package client
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
-	"strings"
-	"archive/zip"
 	"path/filepath"
+	"strings"
 )
 
-//ZipFolder zips a folder recursively into a single target .zip file 
-func ZipFolder (sourceFolder string, targetZipPath string) error {
+// ZipFolder zips a folder recursively into a single target .zip file
+func ZipFolder(sourceFolder string, targetZipPath string) error {
 	//Create the destination zip file
 	zipFile, err := os.Create(targetZipPath)
 	if err != nil {
@@ -19,36 +19,36 @@ func ZipFolder (sourceFolder string, targetZipPath string) error {
 	}
 	defer zipFile.Close()
 
-	//Create a Zip Writer that compresses bytes as they are written 
+	//Create a Zip Writer that compresses bytes as they are written
 	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close() //defer close seals the zip file at the end 
+	defer zipWriter.Close() //defer close seals the zip file at the end
 
-	//Walk the directory tree recursively 
+	//Walk the directory tree recursively
 	err = filepath.Walk(sourceFolder, func(path string, info os.FileInfo, err error) error {
-		if err != nil{
-			return err 
+		if err != nil {
+			return err
 		}
 
 		//skip  directories (we only write files; folders will be recreated during unzip)
 		if info.IsDir() {
 			return nil
 		}
-		//get the relative path of the file (/) for ZIP specification compatability 
+		//get the relative path of the file (/) for ZIP specification compatability
 		relPath, err := filepath.Rel(sourceFolder, path)
 		if err != nil {
 			return fmt.Errorf("failed to get relative path: %v", err)
 		}
-    
-	// Convert paths to use forward slashes (/) for ZIP specification compatibility
-		
-		zipPath :=filepath.ToSlash(relPath)
+
+		// Convert paths to use forward slashes (/) for ZIP specification compatibility
+
+		zipPath := filepath.ToSlash(relPath)
 		// Create a file header inside the zip archive
 		writerInZip, err := zipWriter.Create(zipPath)
 		if err != nil {
 			return fmt.Errorf("Failed to create file entry in zip: %v", err)
 		}
 
-		//Open the actual source file on disk 
+		//Open the actual source file on disk
 		file, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("failed to open file for zipping: %v", err)
@@ -67,6 +67,70 @@ func ZipFolder (sourceFolder string, targetZipPath string) error {
 
 	if err != nil {
 		return fmt.Errorf("directory walk failed %v", err)
+	}
+
+	return nil
+}
+
+func UnZipFolder(zipFilePath string, destinationDir string) error {
+	//open the zip file reader
+	reader, err := zip.OpenReader(zipFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open zip file for reading: %v", err)
+	}
+	defer reader.Close()
+
+	//loop through all files in the zip archive
+
+	for _, file := range reader.File {
+		//Calculate the final file path on disk
+		extractedFilePath := filepath.Join(destinationDir, file.Name)
+
+		// Safety Check: Prevent Zip Slip security vulnerability.
+		// Ensure the path does not try to traverse outside the destination directory.
+
+		cleanDestDir := filepath.Clean(destinationDir)
+		if !strings.HasPrefix(extractedFilePath, cleanDestDir) {
+			return fmt.Errorf("security error: path traversal detected: %s", file.Name)
+		}
+
+		// Check if it's a directory entry inside the zip (some zipping tools create these)
+		if file.FileInfo().IsDir() {
+			err := os.MkdirAll(extractedFilePath, file.Mode())
+			if err != nil {
+				return fmt.Errorf("failed to create directory: %v", err)
+			}
+
+			continue
+		}
+
+		//Create parent directories if they dont exist yet
+		parentDir := filepath.Dir(extractedFilePath)
+		err = os.Mkdir(parentDir, 0755)
+		if err != nil {
+			return fmt.Errorf("failed to create parent directories: %v", err)
+		}
+
+		//Open the file inside the zip archive
+		fileReader, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open zipped file: %v", err)
+		}
+
+		//Create the empty target file on the local hard drive, preserving original file permisions
+		dstFile, err := os.OpenFile(extractedFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			fileReader.Close()
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+
+		//Copy the uncompressed data into the new file on disk
+		_, err = io.Copy(dstFile, fileReader)
+		dstFile.Close()
+		fileReader.Close()
+		if err != nil {
+			return fmt.Errorf("failed to decompress file: %v", err)
+		}
 	}
 
 	return nil
