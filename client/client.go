@@ -6,8 +6,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 // ShareFile will handle the logic for slicing the file and hosting/sending it.
@@ -20,12 +20,49 @@ func ShareFile(filePath string) {
 		fmt.Printf("Error: Failed to get file details: %v\n", err)
 		return
 	}
-	fileName := filepath.Base(filePath)
+
+
+	var finalSharePath = filePath
+	var fileName = filepath.Base(filePath)
+
+	//if it's a directory, compress it on the fly
+	if fileInfo.IsDir() {
+	
+		fmt.Println("Client: Detected directory. Creating temporary zip archive...")
+
+		//Define a temporay zip path in the same directory
+		tempZipName := "temp_" + fileName + ".zip"
+		tempZipPath := filepath.Join(filepath.Dir(filePath), tempZipName)
+
+		//Create zip archive
+		err := ZipFolder(filePath, tempZipPath)
+		if err != nil {
+			fmt.Printf("Error: Failed to zip folder: %v\n ", err)
+			return
+		}
+
+		// Ensure the temporary zip file is deleted when the function exits
+		defer os.Remove(tempZipPath)
+
+		//Redirect our variables to share the zip file instead
+		finalSharePath = tempZipPath
+		//Prefix the name so the reciever knows it's a folder
+		fileName = "FOLDER:" + fileName + ".zip"
+
+		//Get the file size of the zipped archive
+		zipInfo, err := os.Stat(finalSharePath)
+		if err != nil {
+			fmt.Printf("Error: Failed to get zip file stats: %v\n", err)
+			return
+		}
+		fileInfo = zipInfo
+	}
+
 	fileSize := fileInfo.Size()
 
 	//Compute the file's SHA-256 fingerprint
 	fmt.Println("Client: Calculating file hash fingerprint...")
-	hash, err := ComputeFileHash(filePath)
+	hash, err := ComputeFileHash(finalSharePath)
 	if err != nil {
 		fmt.Printf("Error: Failed to calculate file hash: %v\n", err)
 		return
@@ -77,7 +114,7 @@ func ShareFile(filePath string) {
 		fmt.Println("Receiver connected! Streaming file chunks...")
 
 		//Stream the file  bytes into the network socket
-		err = SendFileStream(filePath, conn)
+		err = SendFileStream(finalSharePath, conn)
 		if err != nil {
 			fmt.Printf("Error: File transfer failed: %v\n", err)
 			return
@@ -129,13 +166,19 @@ func DownloadFile(code string) {
 	fileSizeStr := parts[2]
 	targetHash := parts[3]
 
-		// Convert file size from string to integer (int64) so we can pass it to ReceiveFileStream
+	// Check if this is a folder transfer by looking for the "FOLDER:" prefix
+	var isFolder bool
+	if strings.HasPrefix(fileName, "FOLDER:") {
+		isFolder = true
+		fileName = strings.TrimPrefix(fileName, "FOLDER:")
+	}
+
+	// Convert file size from string to integer (int64) so we can pass it to ReceiveFileStream
 	fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
 	if err != nil {
 		fmt.Printf("Error: Invalid file size received from server: %v\n", err)
 		return
 	}
-
 
 	fmt.Println("--------------------------------------------------")
 	fmt.Printf("File Found: %s (%s bytes)\n", fileName, fileSizeStr)
@@ -150,27 +193,39 @@ func DownloadFile(code string) {
 	fmt.Println("Downloading file chunks...")
 
 	//Stream file bytes from the network socket to disk
-	calculatedHash, err := RecieverFileStream(downloadPath,  conn, fileSize)
+	calculatedHash, err := RecieverFileStream(downloadPath, conn, fileSize)
 	if err != nil {
-     fmt.Printf("Error: Download failed: %v\n", err)
-	 //Clean up the incomplete file
-	 os.Remove(downloadPath)
-	 return
+		fmt.Printf("Error: Download failed: %v\n", err)
+		//Clean up the incomplete file
+		os.Remove(downloadPath)
+		return
 	}
 
 	//Verify the SHA-256 fingerprint matches the original
 	fmt.Println("Verifying integrity (SHA-256 Checksum)...")
-		if calculatedHash == targetHash { 
+	if calculatedHash == targetHash {
 		fmt.Println("--------------------------------------------------")
-		fmt.Println("SUCCESS! File downloaded and verified.")
-		fmt.Printf("SHA-256: %s\n", calculatedHash)
+		fmt.Println("SUCCESS! Download completed and verified.")
+
+		// If it's a folder, unzip it and clean up the temp zip file
+		if isFolder {
+			destFolder := "downloaded_" + strings.TrimSuffix(fileName, ".zip")
+			fmt.Printf("Extracting folder structure to: %s/\n", destFolder)
+
+			err := UnZipFolder(downloadPath, destFolder)
+			if err != nil {
+				fmt.Printf("Error: Folder extraction failed: %v\n", err)
+			} else {
+				fmt.Println("Extraction complete! Cleaning up zip archive...")
+				os.Remove(downloadPath) // Delete the downloaded zip
+				fmt.Println("Folder successfully restored!")
+			}
+		}
 		fmt.Println("--------------------------------------------------")
 	} else {
 		fmt.Println("--------------------------------------------------")
-		fmt.Printf("WARNING: Verification failed! File is corrupted.\n")
-		fmt.Printf("Expected Hash:   %s\n", targetHash)
-		fmt.Printf("Calculated Hash: %s\n", calculatedHash)
-		fmt.Println("Deleting corrupted file...")
+		fmt.Printf("WARNING: Verification failed! Data is corrupted.\n")
+		fmt.Println("Deleting incomplete transfer file...")
 		fmt.Println("--------------------------------------------------")
 		os.Remove(downloadPath)
 	}
