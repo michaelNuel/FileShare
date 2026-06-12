@@ -12,7 +12,7 @@ import (
 
 // ShareFile will handle the logic for slicing the file and hosting/sending it.
 // We capitalize "ShareFile" so it is public (exported) and can be used in main.go.
-func ShareFile(filePath string) {
+func ShareFile(filePath string, serverAddr string) {
 	fmt.Printf("Client: Preparing to share file: %s\n", filePath)
 	//Get the file information (name and size)
 	fileInfo, err := os.Stat(filePath)
@@ -69,7 +69,7 @@ func ShareFile(filePath string) {
 	}
 
 	//Connect to the signalling & relay server
-	conn, err := net.Dial("tcp", "localhost:8080")
+	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		fmt.Printf("Error: failed to connect to server: %v\n", err)
 		return
@@ -127,11 +127,11 @@ func ShareFile(filePath string) {
 }
 
 // DownloadFile will handle connecting to the server and saving the incoming chunks.
-func DownloadFile(code string) {
+func DownloadFile(code string, serverAddr string) {
 	fmt.Printf("Client: Attempting to download file with code: %s\n", code)
 
 	//Connect to the signaling & relay server
-	conn, err := net.Dial("tcp", "localhost:8080")
+	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		fmt.Printf("Error: Failed to connect to server: %v\n", err)
 		return

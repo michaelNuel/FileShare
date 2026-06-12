@@ -20,13 +20,15 @@ func main() {
 	var filePath string 
 	var code string 
 	var port string 
+	var serverAddr string  
 
 	//Bind the Variable to the flag set 
 	// The "&" symbol is a pointer, telling Go where to save the values in memory. 
-	shareCmd.StringVar(&filePath, "file", "", "Path to the file to share (Required)")
-	downloadCmd.StringVar(&code, "code", "",  "6-digit download code (Required)" )
+	shareCmd.StringVar(&filePath, "file", "", "Path to the file or folder to share (Required)")
+	shareCmd.StringVar(&serverAddr, "server", "localhost:8080", "Relay server address (IP:port or domain:port)")
+	downloadCmd.StringVar(&code, "code", "", "6-digit download code (Required)")
+	downloadCmd.StringVar(&serverAddr, "server", "localhost:8080", "Relay server address (IP:port or domain:port)")
 	serverCmd.StringVar(&port, "port", "8080", "Port to run the signaling server on")
-
 	//Makes sure a user enters a command 
 	if len(os.Args) < 2 {
 		printGeneralUsage()
@@ -45,7 +47,7 @@ func main() {
 	 }
 	 
 		//Call our client package's function! 
-		client.ShareFile(filePath)
+		client.ShareFile(filePath, serverAddr)
 
 	case "download" :
 		downloadCmd.Parse(os.Args[2:])
@@ -54,7 +56,7 @@ func main() {
 			downloadCmd.PrintDefaults()
 			os.Exit(1)
 		}
-		client.DownloadFile(code)
+		client.DownloadFile(code, serverAddr)
 
 	case "server": 
 	 serverCmd.Parse(os.Args[2:])
@@ -71,7 +73,7 @@ func main() {
 func printGeneralUsage() {
 	fmt.Println("Usage: fileshare <command> [<args>]")
 	fmt.Println("Commands:")
-	fmt.Println("  share     - Share a file (Requires: -file <path>)")
-	fmt.Println("  download  - Download a file (Requires: -code <code>)")
+	fmt.Println("  share     - Share a file/folder (Requires: -file <path>, Optional: -server <addr>)")
+	fmt.Println("  download  - Download a file/folder (Requires: -code <code>, Optional: -server <addr>)")
 	fmt.Println("  server    - Start the signaling/relay server (Optional: -port <port>)")
 }
