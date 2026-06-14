@@ -23,6 +23,6 @@ COPY --from=builder /app/fileshare .
 
 # Expose port 8080
 EXPOSE 8080
-
+    
 # Run the relay server automatically on port 8080
 CMD ["./fileshare", "server", "-port", "8080"]

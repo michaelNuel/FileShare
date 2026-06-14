@@ -13,59 +13,66 @@ func main() {
 	//Define the Flag sets for each  command
 	// flag.ExitOnError tells Go to stop the program and show help text if the user types an invalid flag.
 	shareCmd := flag.NewFlagSet("share", flag.ExitOnError)
-	downloadCmd :=flag.NewFlagSet("download", flag.ExitOnError)
-    serverCmd := flag.NewFlagSet("server", flag.ExitOnError)
-	
-	//Define the specific variables to capture command line arguements 
-	var filePath string 
-	var code string 
-	var port string 
-	var serverAddr string  
+	downloadCmd := flag.NewFlagSet("download", flag.ExitOnError)
+	serverCmd := flag.NewFlagSet("server", flag.ExitOnError)
 
-	//Bind the Variable to the flag set 
-	// The "&" symbol is a pointer, telling Go where to save the values in memory. 
+	//Define the specific variables to capture command line arguements
+	var filePath string
+	var code string
+	var port string
+	var serverAddr string
+	var runWeb bool
+
+	//Bind the Variable to the flag set
+	// The "&" symbol is a pointer, telling Go where to save the values in memory.
 	shareCmd.StringVar(&filePath, "file", "", "Path to the file or folder to share (Required)")
 	shareCmd.StringVar(&serverAddr, "server", "localhost:8080", "Relay server address (IP:port or domain:port)")
 	downloadCmd.StringVar(&code, "code", "", "6-digit download code (Required)")
 	downloadCmd.StringVar(&serverAddr, "server", "localhost:8080", "Relay server address (IP:port or domain:port)")
 	serverCmd.StringVar(&port, "port", "8080", "Port to run the signaling server on")
-	//Makes sure a user enters a command 
+	serverCmd.BoolVar(&runWeb, "web", false, "Run is Web mode (starts HTTP/WebSocket server)") 
+	//Makes sure a user enters a command
 	if len(os.Args) < 2 {
 		printGeneralUsage()
 		os.Exit(1)
 	}
 
-	//Look at the first argument to determine which subcommand to parse 
+	//Look at the first argument to determine which subcommand to parse
 	switch os.Args[1] {
-	case "share": 
-	 //Parse parses flag definitions from the argument list (excluding the command name itself) 
-	 shareCmd.Parse(os.Args[2:])
-	 if filePath == "" {
-		fmt.Println("Error: You must Provide a file path to share. ")
-		shareCmd.PrintDefaults() //	Prints the list of the flags and description 
-		os.Exit(1)
-	 }
-	 
-		//Call our client package's function! 
+	case "share":
+		//Parse parses flag definitions from the argument list (excluding the command name itself)
+		shareCmd.Parse(os.Args[2:])
+		if filePath == "" {
+			fmt.Println("Error: You must Provide a file path to share. ")
+			shareCmd.PrintDefaults() //	Prints the list of the flags and description
+			os.Exit(1)
+		}
+
+		//Call our client package's function!
 		client.ShareFile(filePath, serverAddr)
 
-	case "download" :
+	case "download":
 		downloadCmd.Parse(os.Args[2:])
 		if code == "" {
 			fmt.Println("Error: you must provide a 6 digit code.")
 			downloadCmd.PrintDefaults()
-			os.Exit(1)
+			os.Exit(1)  
 		}
 		client.DownloadFile(code, serverAddr)
 
-	case "server": 
-	 serverCmd.Parse(os.Args[2:])
-	 server.Start(port)
-
-	default: 
-	fmt.Printf("Unknown command: %s\n", os.Args[1])
-	printGeneralUsage()
-	os.Exit(1)
+	case "server":
+		serverCmd.Parse(os.Args[2:])
+		if runWeb {
+			server.StartWeb(port)// Start our new Web server!
+		} else {
+			server.Start(port)  //Start the Original TCP server!
+		} 
+	
+ 
+	default:
+		fmt.Printf("Unknown command: %s\n", os.Args[1])
+		printGeneralUsage()
+		os.Exit(1)
 	}
 }
 
