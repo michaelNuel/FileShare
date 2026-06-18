@@ -51,7 +51,7 @@ func StartWeb(port string) {
 
 	//Start the Http server
 	//If it fails, listenAndServe returns an error, which we print.
-	err := http.ListenAndServe(":"+port, fileServer)
+	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		fmt.Printf("Web Server Error: %v\n", err)
 	}
