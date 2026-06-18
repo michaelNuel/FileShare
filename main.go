@@ -19,9 +19,15 @@ func main() {
 	//Define the specific variables to capture command line arguements
 	var filePath string
 	var code string
-	var port string
+	// var port string
 	var serverAddr string
 	var runWeb bool
+		// Check if the cloud provider injected a PORT environment variable.
+	// If it exists, use it. Otherwise, default to "8080".
+		port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	//Bind the Variable to the flag set
 	// The "&" symbol is a pointer, telling Go where to save the values in memory.

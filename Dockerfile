@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary
-FROM golang:1.20-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
@@ -25,4 +25,4 @@ COPY --from=builder /app/fileshare .
 EXPOSE 8080
     
 # Run the relay server automatically on port 8080
-CMD ["./fileshare", "server", "-port", "8080"]
+CMD ["./fileshare", "server", "-web"]
