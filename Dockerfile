@@ -21,6 +21,9 @@ WORKDIR /app
 # Copy the compiled binary from the builder stage
 COPY --from=builder /app/fileshare .
 
+# Copy the web folder containing index.html, style.css, and app.js
+COPY --from=builder /app/web ./web
+
 # Expose port 8080
 EXPOSE 8080
     
