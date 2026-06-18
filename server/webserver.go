@@ -70,14 +70,20 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	defer ws.Close()
 
+	// Set a read deadline for the initial command to prevent idle connection leaks
+	ws.SetReadDeadline(time.Now().Add(30 * time.Second))
+
 	//Read the first command message (expected to be TEXT)
 	msgType, payload, err := ws.ReadMessage()
 	if err != nil {
 		return
 	}
 
+	// Reset read deadline for the rest of the connection life
+	ws.SetReadDeadline(time.Time{})
+
 	if msgType != websocket.TextMessage {
-		ws.WriteMessage(websocket.TextMessage, []byte("Error expected text command"))
+		ws.WriteMessage(websocket.TextMessage, []byte("ERROR expected text command"))
 		return
 	}
 
@@ -112,7 +118,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func handleWebShare(senderWs *websocket.Conn, fileName string, sizeStr string, fileHash string) {
 	size, err := strconv.ParseInt(sizeStr, 10, 64)
 	if err != nil {
-		senderWs.WriteMessage(websocket.TextMessage, []byte("Error invalid file size"))
+		senderWs.WriteMessage(websocket.TextMessage, []byte("ERROR invalid file size"))
 		return 
 	}
 
@@ -158,6 +164,7 @@ func handleWebShare(senderWs *websocket.Conn, fileName string, sizeStr string, f
 				break
 			}
 		}
+		receiverWs.Close() // Close receiver to notify it that transfer is complete and trigger EOF
 		fmt.Printf("Web Server: Transfer ended for code %s\n", code)
 	case <-time.After(5 * time.Minute):
 		fmt.Printf("Web Server: Session %s timed out\n", code)
@@ -191,8 +198,14 @@ func handleWebDownload(receiverWs *websocket.Conn, code string) {
 	if err != nil || t != websocket.TextMessage || strings.TrimSpace(string(payload)) != "READY" {
 		return
 	}
-	// Wake up sender
-	session.receiverChan <- receiverWs
+	// Wake up sender in a non-blocking way to prevent leaks if multiple receivers request the same code
+	select {
+	case session.receiverChan <- receiverWs:
+		// Successfully sent to sender
+	default:
+		receiverWs.WriteMessage(websocket.TextMessage, []byte("ERROR transfer already in progress"))
+		return
+	}
 	// Keep connection alive while sender relays. We block here until connection is closed.
 	for {
 		_, _, err := receiverWs.ReadMessage()

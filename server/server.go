@@ -65,6 +65,9 @@ func handleConnection(conn net.Conn) {
 		}
 	}()
 
+	// Set a read deadline for the initial command to prevent idle connection leaks
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
 	//Read the first line of text from the connection
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadString('\n')
@@ -72,13 +75,16 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
+	// Reset read deadline for the rest of the connection life
+	conn.SetReadDeadline(time.Time{})
+
 	//Trim the newline Characters and split by spaces
 	line = strings.TrimSpace(line)
 	// ADD THIS DEBUG LINE HERE:
 	fmt.Printf("Server Debug: Received line: %q\n", line)
 	parts := strings.Split(line, " ")
 	if len(parts) < 2 {
-		fmt.Fprintln(conn, "Error invalid command structure")
+		fmt.Fprintln(conn, "ERROR invalid command structure")
 		return
 	}
 
@@ -88,7 +94,7 @@ func handleConnection(conn net.Conn) {
 	case "SHARE":
 		//Format: Share <filename> <filesize> <filehash>
 		if len(parts) < 4 {
-			fmt.Fprintln(conn, "Error usage: Share <filename> <filesize> <filehash>")
+			fmt.Fprintln(conn, "ERROR usage: SHARE <filename> <filesize> <filehash>")
 			return
 		}
 		handleShare(conn, parts[1], parts[2], parts[3])
@@ -101,7 +107,7 @@ func handleConnection(conn net.Conn) {
 		conn = nil // Set to nil so defer doesn't close it; handleDownload will handle close
 
 	default:
-		fmt.Fprintln(conn, "Error unknown command")
+		fmt.Fprintln(conn, "ERROR unknown command")
 
 	}
 }
@@ -112,7 +118,7 @@ func handleShare(senderConn net.Conn, fileName string, sizeStr string, fileHash 
 	//Convert file size from string to integer
 	size, err := strconv.ParseInt(sizeStr, 10, 64)
 	if err != nil {
-		fmt.Fprintln(senderConn, "Error invalid file size")
+		fmt.Fprintln(senderConn, "ERROR invalid file size")
 		return
 	}
 	//Generate a 6-digit code
@@ -175,7 +181,7 @@ func handleDownload(receiverConn net.Conn, code string) {
 	sessionsMu.Unlock()
 
 	if !exists {
-		fmt.Fprintln(receiverConn, "Error session not found")
+		fmt.Fprintln(receiverConn, "ERROR session not found")
 		receiverConn.Close()
 		return
 	}
@@ -193,7 +199,14 @@ func handleDownload(receiverConn net.Conn, code string) {
 
 	//send the reciever's connection to the sender's goroutine.
 	//This wakes up the select block in the handleShare !
-	session.receiverChan <- receiverConn
+	select {
+	case session.receiverChan <- receiverConn:
+		// Successfully sent connection
+	default:
+		fmt.Fprintln(receiverConn, "ERROR transfer already in progress")
+		receiverConn.Close()
+		return
+	}
 }
 
 // generateCode generates a temporary 6-digit random code

@@ -150,7 +150,7 @@ shareBtn.addEventListener('click', async () => {
                 progressScreen.classList.remove('hidden');
                 statusTitle.textContent = 'Streaming file chunks...';
                 await streamFile();
-            } else if (parts[0].startsWith('ERROR')) {
+            } else if (parts[0].toUpperCase().startsWith('ERROR')) {
                 alert('Server error: ' + msg);
                 resetState();
             }
@@ -243,7 +243,7 @@ downloadBtn.addEventListener('click', () => {
 
                 // Signal ready to receive binary bytes
                 websocket.send('READY');
-            } else if (data.startsWith('ERROR')) {
+            } else if (data.toUpperCase().startsWith('ERROR')) {
                 alert('Server Error: ' + data);
                 resetState();
             }
